@@ -1,0 +1,439 @@
+package dpnm.netmsuite.plc.manager.backend;
+
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import com.adventnet.snmp.beans.SnmpTable;
+import com.adventnet.snmp.beans.SnmpTarget;
+import com.adventnet.snmp.snmp2.SnmpVarBind;
+
+public class SNMPManger {
+	
+	private static char[] temp_chex1;
+	private static char[] temp_chec2;
+
+	public String[] snmpGetList(String host, String oids[], int port, String community)
+	{
+		SnmpTarget target = new SnmpTarget();
+		
+		//set host and other parameters
+		target.setTargetHost(host);  
+		target.setObjectIDList(oids);  
+		target.setTargetPort(port);
+		target.setCommunity(community);
+		
+		for (int i = 0; i < oids.length; i++)
+			System.out.println("OID : " + oids[i]);
+		
+		// do the SNMP GET operation
+		String result[] = target.snmpGetList();
+		
+		for(int i = 0; i < result.length; i++)
+		{
+			System.out.println(result[i]);
+		}
+		
+		return result;
+	}
+
+	public String[] snmpGetCol(String host, String oid, int port, String community)
+	{
+//		 instantiate SNMP target bean 
+		SnmpTarget target = new SnmpTarget();
+		
+		String check = oid;
+		Vector ret_temp = new Vector();
+		
+		target.setTargetHost(host);  
+		target.setTargetPort(port);
+		target.setCommunity(community);	
+		target.setObjectID(oid);
+		
+		while( true )
+		{
+			String temp_oid = oid;
+			
+			SnmpVarBind result = target.snmpGetNextVariableBinding();
+			
+			if (result.getObjectID().toString().contains(check))
+			{
+				target.setObjectID(temp_oid);
+				
+				String result_val = target.snmpGetNext();
+				
+				ret_temp.addElement(result_val);
+				
+				oid = result.getObjectID().toString();
+		
+				target.setObjectID(oid);
+			}
+				
+			else
+				break;
+		}
+		
+		String[] ret_val = new String[ret_temp.size()];
+		for(int i = 0; i < ret_temp.size(); i++)
+			ret_val[i] = (String)ret_temp.get(i);
+	
+		return ret_val;
+	}
+	
+	public String[][] snmpGetTable(String host, String[] oids, int port, String community, int row_size, int col_size)
+	{
+//		 instantiate SNMP target bean 
+		SnmpTarget target = new SnmpTarget();
+		
+		String check = oids[0];
+		String[][] ret_val = new String[row_size][col_size];
+		
+		int row = 0;
+		
+		target.setTargetHost(host);  
+		target.setTargetPort(port);
+		target.setCommunity(community);	
+		target.setObjectIDList(oids);
+		
+		while( true )
+		{
+			String[] temp_oids = oids;
+			
+			SnmpVarBind[] result = target.snmpGetNextVariableBindings();
+			
+			if (result[0].getObjectID().toString().contains(check))
+			{
+				target.setObjectIDList(temp_oids);
+				
+				String[] result_val = target.snmpGetNextList();
+				
+				for (int i = 0; i < col_size; i++)
+				{
+					//System.out.println("aaa.  Value1:" + result_val[i]);
+					ret_val[row][i] = result_val[i];
+				}
+				
+				for (int i = 0; i < col_size; i++)
+				{
+					oids[i] = result[i].getObjectID().toString();
+				}
+		
+				target.setObjectIDList(oids);
+			}
+				
+			else
+				break;	
+			
+			row++;
+		}
+	
+		return ret_val;
+		
+//		for( int i = 0; i < row_size; i++ )
+//		{
+//			String[] result_val = target.snmpGetNextList();
+//				
+//			for (int j = 0; i < col_size; i++)
+//			{
+//				System.out.println("aaa.  Value1:" + result_val[j]);
+//			}
+//		}
+	}
+	
+	public String snmpsetObject(String host, String oid, int port, String community, String mibs, String value)
+	{
+		//Instantiate the SnmpTarget bean	
+		SnmpTarget target = new SnmpTarget();
+		
+		//set host and other parameters
+		target.setTargetHost(host);  
+		target.setObjectID(oid);  
+		target.setTargetPort(port);
+		target.setCommunity(community);
+		
+		// load the mib file
+		try{
+			target.loadMibs(mibs);
+		} catch (Exception ex) {
+			System.err.println("Error loading MIBs: "+ex);
+		}	
+		
+		String result = "";
+		//do the SNMP SET operation and print the results
+		try {
+			result = target.snmpSet(value);
+			
+			System.out.println("Response PDU received from " +target.getTargetHost()+ ", community: " + target.getCommunity());
+			System.out.println("OBJECT ID: "+target.getObjectID());
+			System.out.println("Response: "+result);	
+			
+		} catch (Exception e) {
+			System.err.println("Set Error: "+e.getMessage());
+		}
+		
+		return result;
+	}
+	
+	public String parseOctet(String result, int start, int end) {
+		StringTokenizer st = new StringTokenizer(result, " ");
+		String num = "0x";
+		int count = 0;
+		boolean check = false;
+		while(st.hasMoreElements()) {
+			if (count == start) {
+				check = true;
+			}
+			if (check) {
+				num += st.nextToken();
+			} else {
+				st.nextToken();
+			}
+			if (count == end) {
+				break;
+			}
+			count++;
+		}
+		return Integer.decode(num).toString();
+	}
+	
+	public String parseString(String result, int start, int end) {
+		StringTokenizer st = new StringTokenizer(result, " ");
+		String num = "";
+		int count = 0;
+		boolean check = false;
+		while(st.hasMoreElements()) {
+			if (count == start) {
+				check = true;
+			}
+			if (check) {
+				num += " ";
+				num += st.nextToken();
+			} else {
+				st.nextToken();
+			}
+			if (count == end) {
+				break;
+			}
+			count++;
+		}
+		
+//		System.out.println("p String : " + num);
+		return num;
+	}
+	
+	public static String getHexString(int input1, int input2) {
+		String hexs1 = Integer.toHexString(input1);
+		String hexs2 = Integer.toHexString(input2);
+		int len1 = hexs1.length();
+		int len2 = hexs2.length();
+		
+		char temp_chexs1[] = new char[8];
+		char temp_chexs2[] = new char[8];
+
+		char chexs1[] = new char[8];
+		char chexs2[] = new char[8];
+		
+		int j = 0;
+		for (int i = 7; i >= 0; i--) {
+			if (j < len1) {
+				chexs1[i] = hexs1.charAt(len1-j-1);
+				j++;
+			} else {
+				chexs1[i] = '0';
+			}
+		}
+		
+		j = 7;
+		for (int i = 7; i >= 0; i--)
+		{
+			if (i == 2 || i == 5 )
+				temp_chexs1[i] = ' ';
+			
+			else
+			{
+				temp_chexs1[i] = chexs1[j];
+				j--;
+			}
+				
+		}
+		
+		j = 0;
+		for (int i = 7; i >= 0; i--) {
+			if (j < len2) {
+				chexs2[i] = hexs2.charAt(len2-j-1);
+				j++;
+			} else {
+				chexs2[i] = '0';
+			}
+		}
+		
+		j = 7;
+		for (int i = 7; i >= 0; i--)
+		{
+			if (i == 2 || i == 5 )
+				temp_chexs2[i] = ' ';
+			
+			else
+			{
+				temp_chexs2[i] = chexs2[j];
+				j--;
+			}
+				
+		}
+		
+		String ret1 = new String(temp_chexs1);
+		String ret2 = new String(temp_chexs2);
+		
+		System.out.println("aaa dfaf " + ret1 + " " + ret2);
+		
+		return (ret1 + " " + ret2);
+	}
+	
+	public static String LongtoHex(long input)
+	{
+		String hexs1 = Long.toHexString(input);
+		int len1 = hexs1.length();
+		
+		char temp_chexs1[] = new char[11];
+
+		char chexs1[] = new char[11];
+		
+		int j = 0;
+		for (int i = 10; i >= 0; i--) {
+			if (j < len1) {
+				chexs1[i] = hexs1.charAt(len1-j-1);
+				j++;
+			} else {
+				chexs1[i] = '0';
+			}
+		}
+		
+		j = 10;
+		for (int i = 10; i >= 0; i--)
+		{
+			if (i == 2 || i == 5 || i == 8)
+				temp_chexs1[i] = ' ';
+			
+			else
+			{
+				temp_chexs1[i] = chexs1[j];
+				j--;
+			}
+				
+		}
+		
+		String ret1 = new String(temp_chexs1);
+			
+		return ret1;
+	}
+	public static String setIntegerValue(String result, int start, String value) {
+		return result.substring(0,3*start) + value 
+		+ result.substring(3*start+value.length(), result.length());
+	}
+
+	public static String getHexValue(String binary) {
+		StringBuffer sb = new StringBuffer();
+		String b = binary.substring(0,4);
+		int c = 0;
+		for (int i = 0; i < 4; i++) {
+			c = c*2 + Integer.parseInt(b.substring(i,i+1));
+		}
+		sb.append(Integer.toHexString(c));
+		b = binary.substring(4,8);
+		c = 0;
+		for (int i = 0; i < 4; i++) {
+			c = c*2 + Integer.parseInt(b.substring(i,i+1));
+		}
+		sb.append(Integer.toHexString(c));
+		return sb.toString();
+	}
+	
+	public static String setBitValue(String result, int start, String value) {
+		StringTokenizer st = new StringTokenizer(result, " ");
+		String num = "0x";
+		while(st.hasMoreElements()) {
+			num += st.nextToken();
+		}
+		String bits = Integer.toBinaryString(Integer.decode(num).intValue());
+		int len = bits.length();
+		char cbits[] = new char[32];
+		int j = 0;
+		for (int i = 31; i >= 0; i--) {
+			if (j < len) {
+				cbits[i] = bits.charAt(len-j-1);
+				j++;
+			} else {
+				cbits[i] = '0';
+			}
+		}
+		bits = new String(cbits);
+		bits = bits.substring(0,31-start-value.length()+1) + value 
+		+ bits.substring(31-start+1,bits.length());
+		
+		StringBuffer sb = new StringBuffer();
+		int i = 0;
+		for (i = 0; i < 3 ; i++) {
+			sb.append(getHexValue(bits.substring(i*8,(i+1)*8))+" ");
+		}
+		sb.append(getHexValue(bits.substring(i*8,(i+1)*8)));
+		return sb.toString();
+	}
+	
+
+	
+	/**
+	 *	This method is to make an integer value from the byte array
+	 *
+	 *	@param result the byte string array
+	 *	@param start starting index
+	 *	@param end ending index
+	 *	@return integer value of the byte string array from start to end
+	 */
+	public static String getBitValue(String result, int start, int end) {
+		StringTokenizer st = new StringTokenizer(result, " ");
+		String num = "0x";
+		while(st.hasMoreElements()) {
+			num += st.nextToken();
+		}
+		String bits = Integer.toBinaryString(Integer.decode(num).intValue());
+		int len = bits.length();
+		char cbits[] = new char[32];
+		int j = 0;
+		for (int i = 31; i >= 0; i--) {
+			if (j < len) {
+				cbits[i] = bits.charAt(len-j-1);
+				j++;
+			} else {
+				cbits[i] = '0';
+			}
+		}
+		return (new String(cbits)).substring(31-end, 31-start+1);
+	}
+
+	public int countRow(String host, String oid, int port, String community)
+	{
+		// TODO Auto-generated method stub
+	SnmpTarget target = new SnmpTarget();
+		
+	int count = 0;
+	String check = oid;
+	target.setTargetHost(host);  
+	target.setTargetPort(port);
+	target.setCommunity(community);	
+	target.setObjectID(oid);  
+		
+	while( true )
+	{
+		SnmpVarBind result = target.snmpGetNextVariableBinding();
+			
+		if (result.getObjectID().toString().contains(check))
+		{
+			count++;
+		}
+				
+		else
+			break;	
+	}
+		
+	return count;
+	}
+}
